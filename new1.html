@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MPEG-TS Live Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/mpegts.js@latest/dist/mpegts.min.js"></script>
+    <style>
+        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        video { width: 100%; max-width: 800px; height: auto; background: #000; }
+    </style>
+</head>
+<body>
+    <video id="video" controls autoplay></video>
+    <script>
+        (function() {
+            const video = document.getElementById('video');
+            const streamUrl = 'http://6395online.com:8080/live/Iptv6988/0905692638/446293.ts';
+
+            // กำหนด headers เพื่อเลี่ยงการถูกบล็อก (ถ้าจำเป็น)
+            const headers = {
+                'Referer': 'http://6395online.com:8080/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            };
+
+            function createPlayer() {
+                if (typeof mpegts === 'undefined' || !mpegts.isSupported()) {
+                    video.src = streamUrl;
+                    video.play();
+                    console.warn('mpegts.js not supported, fallback to native');
+                    return null;
+                }
+
+                const player = mpegts.createPlayer({
+                    type: 'mpegts',
+                    url: streamUrl,
+                    isLive: true,
+                    enableWorker: true,                // ใช้ Web Worker เพื่อประสิทธิภาพ
+                    liveBufferLatency: 15,              // หน่วง buffer 15 วินาที (ช่วยให้เล่นต่อเนื่อง)
+                    stashInitialSize: 512,              // buffer เริ่มต้น 512 KB
+                    maxBufferSize: 2048,                // buffer สูงสุด 2 MB
+                    maxBufferLength: 90,                // เก็บ buffer 90 วินาที
+                    reconnectDelay: 1000,               // หน่วงเวลา reconnect 1 วินาที
+                    reconnectAttempts: 30,              // พยายาม reconnect 30 ครั้ง
+                    headers: headers,                   // ส่ง headers เพื่อป้องกัน 403
+                    // เพิ่มตัวเลือกเพิ่มเติม
+                    fixAudioTimestampGap: true,
+                    enableStashBuffer: true,
+                });
+
+                player.attachMediaElement(video);
+                player.load();
+
+                player.on(mpegts.Events.LOADING_COMPLETE, () => {
+                    console.log('✅ Player loaded');
+                });
+
+                // จัดการ error + auto-recover
+                player.on(mpegts.Events.ERROR, (err) => {
+                    console.warn('⚠️ Player error:', err);
+                    // ถ้าเป็น error ที่ทำให้เสียหาย (fatal) ให้สร้าง player ใหม่
+                    if (err.type === 'networkError' || err.type === 'fatal') {
+                        console.log('🔄 Recovering...');
+                        setTimeout(() => {
+                            player.destroy();  // ลบ player เก่า
+                            const newPlayer = createPlayer();  // สร้างใหม่
+                            if (newPlayer) {
+                                window.player = newPlayer;
+                            }
+                        }, 2000);
+                    }
+                });
+
+                video.play();
+                return player;
+            }
+
+            // เริ่มต้น
+            let player = createPlayer();
+            window.player = player;  // เก็บไว้ให้ debug
+
+            // เมื่อ video หยุด (ผู้ใช้กด pause) แล้วต้องการให้เล่นต่อ
+            video.addEventListener('pause', () => {
+                // ถ้าผู้ใช้กด pause เอง ก็ไม่ต้องทำอะไร
+            });
+
+            // ถ้า video เกิด 'stalled' หรือ 'waiting' ลองเล่นต่อ
+            video.addEventListener('waiting', () => {
+                console.log('⏳ Video waiting, forcing play...');
+                video.play().catch(e => console.warn('Play failed:', e));
+            });
+
+            // ถ้าเล่นแล้วค้าง (stalled) ให้ลองรีเฟรช player
+            video.addEventListener('stalled', () => {
+                console.warn('⚠️ Video stalled, reloading player...');
+                if (window.player) {
+                    window.player.destroy();
+                    window.player = createPlayer();
+                }
+            });
+
+        })();
+    </script>
+</body>
+</html>
