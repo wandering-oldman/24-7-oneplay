@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Serie-Days → M3U Playlist</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b1020;--panel:#121a2e;--line:#2a385c;--text:#eef3ff;--muted:#aab6d3;--accent:#ff4fa0;--accent2:#6d8cff;--ok:#3ddc97;--bad:#ff7887}
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(135deg,#090d19,#121a33);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+    .wrap{max-width:1180px;margin:auto;padding:26px}.hero{padding:24px 0 14px}.hero h1{margin:0 0 8px;font-size:clamp(25px,4vw,40px)}.hero p{color:var(--muted);margin:0;max-width:850px}
+    .panel{background:rgba(18,26,46,.92);border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0;box-shadow:0 12px 40px #0003}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}label{display:block;color:var(--muted);font-size:13px;margin-bottom:6px}input,select,button,textarea{width:100%;border:1px solid var(--line);border-radius:9px;background:#0b1224;color:var(--text);padding:10px;font:inherit}button{cursor:pointer;background:linear-gradient(100deg,var(--accent2),var(--accent));border:0;font-weight:700}button.secondary{background:#202d4c}button:disabled{opacity:.5;cursor:not-allowed}.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}.actions button{width:auto;min-width:150px}.hint{font-size:12px;color:var(--muted);margin-top:6px}.status{white-space:pre-wrap;color:var(--muted);min-height:24px}.status.ok{color:var(--ok)}.status.bad{color:var(--bad)}
+    table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13px}th,td{padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}th{color:#cbd6f4}td img{width:46px;height:66px;object-fit:cover;border-radius:5px;background:#202a42}td a{color:#9fb5ff;word-break:break-all}.scroll{overflow:auto;max-height:500px}.tag{display:inline-block;padding:2px 7px;border-radius:20px;background:#23345d;color:#c9d6ff;font-size:11px;margin:2px}.warn{border-left:3px solid #ffbf5c;padding:10px 13px;color:#f9dda8;background:#332916;border-radius:7px;font-size:13px}.count{font-weight:700;color:white}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <h1>Serie-Days → M3U Playlist</h1>
+    <p>เครื่องมือ HTML ไฟล์เดียวสำหรับอ่านข้อมูลสาธารณะจาก <strong>seriedays.com</strong> เท่านั้น แล้วสร้างรายการ M3U จากข้อมูลซีรี่ย์ ตอน รูปปก และ URL ตัวเล่นที่หน้าเว็บเปิดเผย</p>
+  </header>
+
+  <section class="panel">
+    <div class="warn">ไฟล์แนบเดิมเป็น HTML ของ Google AI Studio ไม่ใช่ซอร์สโค้ดตัวดึงข้อมูลหลายเว็บไซต์ ดังนั้นไฟล์นี้จึงเขียนใหม่จากโครงสร้างจริงของ Serie-Days ที่ตรวจสอบได้ หากเปิดจากเครื่องโดยตรงแล้วเกิด CORS ให้ใส่ URL ของ reverse proxy ที่คุณควบคุมเองในช่องด้านล่าง</div>
+    <div class="grid" style="margin-top:16px">
+      <div><label for="listUrl">หน้ารายการซีรี่ย์</label><input id="listUrl" value="https://www.seriedays.com/" autocomplete="off"></div>
+      <div><label for="proxyUrl">Proxy ของคุณ (ไม่บังคับ)</label><input id="proxyUrl" placeholder="https://your-domain.example/proxy?url=" autocomplete="off"><div class="hint">ต้องรับค่า URL ต่อท้าย แล้วส่งคืน HTML ของ URL นั้น</div></div>
+      <div><label for="limit">จำนวนเรื่องสูงสุด</label><input id="limit" type="number" value="20" min="1" max="100"></div>
+      <div><label for="language">ภาษาเสียง</label><select id="language"><option>Thai</option><option>Sound Track</option><option value="">ทุกภาษา/ตามค่าหน้าเว็บ</option></select></div>
+    </div>
+    <div class="actions"><button id="scanBtn">1. อ่านรายการซีรี่ย์</button><button id="buildBtn" disabled>2. ดึงตอนและสร้าง M3U</button><button id="downloadBtn" class="secondary" disabled>ดาวน์โหลดไฟล์ .m3u</button><button id="copyBtn" class="secondary" disabled>คัดลอก M3U</button></div>
+    <div id="status" class="status" role="status"></div>
+  </section>
+
+  <section class="panel"><div>พบรายการซีรี่ย์: <span id="seriesCount" class="count">0</span> เรื่อง | รายการ M3U: <span id="entryCount" class="count">0</span> รายการ</div><div class="scroll"><table><thead><tr><th>ปก</th><th>ชื่อเรื่อง</th><th>URL รายละเอียด</th><th>ตอนที่ตรวจพบ</th><th>สถานะ</th></tr></thead><tbody id="seriesBody"></tbody></table></div></section>
+  <section class="panel"><label for="output">ผลลัพธ์ M3U</label><textarea id="output" rows="14" spellcheck="false" placeholder="#EXTM3U\n#EXTINF:-1,..."></textarea></section>
+</div>
+<script>
+'use strict';
+const SITE = 'https://www.seriedays.com/';
+let series = [], m3uText = '';
+const $ = id => document.getElementById(id);
+function status(text, kind=''){ $('status').textContent=text; $('status').className='status '+kind; }
+function absoluteUrl(value, base=SITE){ try{return new URL(value,base).href}catch{return ''} }
+function allowedSiteUrl(url){ try { const u=new URL(url); return u.protocol==='https:' && u.hostname==='www.seriedays.com'; } catch { return false; } }
+function cleanText(s){return (s||'').replace(/\\s+/g,' ').trim()}
+function esc(s){return String(s||'').replace(/[\r\n]+/g,' ').replace(/,/g,' -').trim()}
+async function getText(url, options={}){
+  if(!allowedSiteUrl(url)) throw new Error('อนุญาตเฉพาะ URL ของ www.seriedays.com เท่านั้น');
+  const proxy=$('proxyUrl').value.trim();
+  const requestUrl=proxy ? proxy + encodeURIComponent(url) : url;
+  const res=await fetch(requestUrl,{...options,headers:{Accept:'text/html,application/xhtml+xml',...(options.headers||{})}});
+  if(!res.ok) throw new Error('HTTP '+res.status+' จาก '+url);
+  return await res.text();
+}
+function parseSeriesList(html, base){
+  const doc=new DOMParser().parseFromString(html,'text/html'), seen=new Set(), out=[];
+  for(const a of doc.querySelectorAll('a[href]')){
+    const href=absoluteUrl(a.getAttribute('href'),base); if(!allowedSiteUrl(href)) continue;
+    const img=a.querySelector('img'); if(!img) continue;
+    const text=cleanText(a.textContent), alt=cleanText(img.getAttribute('alt'));
+    const title=(alt||text).replace(/^ดูซีรี่ย์ออนไลน์ฟรี\s*/i,'').trim();
+    if(!title || title.length<2 || /logo|พนัน|ufabet|lott|banner|โฆษณา/i.test(title+href)) continue;
+    if(href===SITE || /\/wp-content\/|\/category\/|fillter-year|\/tag\//i.test(href)) continue;
+    if(seen.has(href)) continue; seen.add(href);
+    const image=absoluteUrl(img.getAttribute('data-lazy-src')||img.getAttribute('src')||'',base);
+    out.push({title: title.replace(/\s+/g,' '), url:href, image, episodes:[], status:'รออ่าน'});
+  }
+  return out;
+}
+function findTitle(doc){
+  const og=doc.querySelector('meta[property="og:title"]')?.content;
+  const h=doc.querySelector('h1,.entry-title,.post-title');
+  return cleanText((h&&h.textContent)||og||doc.title).replace(/\s*[-|].*seriedays\.com.*$/i,'').trim();
+}
+function parseDetail(html, pageUrl, selectedLang){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const title=findTitle(doc), ogImage=doc.querySelector('meta[property="og:image"]')?.content;
+  const poster=absoluteUrl(ogImage||doc.querySelector('img.wp-post-image')?.getAttribute('data-lazy-src')||doc.querySelector('img.wp-post-image')?.src||'',pageUrl);
+  const cfgMatch=html.match(/var\s+halim_cfg\s*=\s*\{([\s\S]*?)\};/), cfg={};
+  if(cfgMatch){ for(const key of ['post_id','episode','server']){const m=cfgMatch[1].match(new RegExp('"?'+key+'"?\\s*:\\s*([0-9]+)')); if(m) cfg[key]=m[1];} }
+  const buttons=[...doc.querySelectorAll('.halim-btn[data-post-id]')].map(x=>({postid:x.dataset.postId,server:x.dataset.server||'1',episode:x.dataset.episode||'1',title:cleanText(x.dataset.title)||title}));
+  const lang=selectedLang || doc.querySelector('#Lang_select')?.value || 'Thai';
+  const episodeLinks=[...doc.querySelectorAll('select[name="Sequel_select"] option[value]')].map((o,i)=>({label:cleanText(o.textContent)||('ตอนที่ '+(i+1)),url:absoluteUrl(o.value,pageUrl)})).filter(x=>allowedSiteUrl(x.url));
+  if(!episodeLinks.length) episodeLinks.push({label:'ตอนที่ '+(cfg.episode||1),url:pageUrl});
+  return {title,poster,lang,buttons,episodeLinks,cfg};
+}
+function extractPlayerUrl(html, base){
+  const doc=new DOMParser().parseFromString(html,'text/html');
+  const candidates=[...doc.querySelectorAll('iframe[src],video[src],video source[src],source[src],a[href]')].map(x=>x.src||x.href).map(x=>absoluteUrl(x,base)).filter(Boolean);
+  return candidates.find(u=>/^https:\/\/(main\.)?24playerhd\.com\//i.test(u)) || candidates.find(u=>/\.(m3u8|mp4)(\?|$)/i.test(u)) || candidates.find(u=>!allowedSiteUrl(u) && !/youtube\.com|doubleclick|googlesyndication/i.test(u)) || '';
+}
+async function resolveEpisode(pageUrl, detail, ep, index){
+  const buttons=detail.buttons.length?detail.buttons:[{postid:detail.cfg.post_id||'',server:detail.cfg.server||'1',episode:detail.cfg.episode||String(index+1),title:detail.title}];
+  const b=buttons[0]; let player='';
+  if(b.postid){
+    const endpoint=absoluteUrl('/api/get.php',SITE), proxy=$('proxyUrl').value.trim();
+    const requestUrl=proxy ? proxy+encodeURIComponent(endpoint) : endpoint;
+    const body=new URLSearchParams({action:'halim_ajax_player',nonce:'',episode:b.episode,server:b.server,postid:b.postid,lang:detail.lang,title:detail.title});
+    try{const r=await fetch(requestUrl,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8',Accept:'text/html'},body}); if(r.ok) player=extractPlayerUrl(await r.text(),SITE)}catch(e){/* fallback below */}
+  }
+  return {name:detail.title+' - '+ep.label, group:detail.title, image:detail.poster, url:player||pageUrl, source:player?'player':'detail'};
+}
+function renderRows(){ $('seriesCount').textContent=series.length; $('seriesBody').innerHTML=series.map((s,i)=>`<tr><td>${s.image?`<img src="${s.image}" alt="">`:''}</td><td>${esc(s.title)}</td><td><a href="${s.url}" target="_blank" rel="noopener">${s.url}</a></td><td>${s.episodes.length||'-'}</td><td>${s.status}</td></tr>`).join(''); }
+$('scanBtn').onclick=async()=>{ $('scanBtn').disabled=true; $('buildBtn').disabled=true; series=[]; renderRows(); status('กำลังอ่านหน้า '+$('listUrl').value+' ...'); try{const url=absoluteUrl($('listUrl').value.trim(),SITE); if(!allowedSiteUrl(url)) throw new Error('หน้ารายการต้องอยู่บน www.seriedays.com'); const html=await getText(url); series=parseSeriesList(html,url).slice(0,Math.max(1,Math.min(100,Number($('limit').value)||20))); if(!series.length) throw new Error('ไม่พบการ์ดซีรี่ย์ อาจเป็นเพราะโครงสร้างเว็บเปลี่ยนหรือ CORS'); renderRows(); $('buildBtn').disabled=false; status('อ่านรายการสำเร็จ '+series.length+' เรื่อง','ok')}catch(e){status('อ่านข้อมูลไม่สำเร็จ: '+e.message,'bad')}finally{$('scanBtn').disabled=false}};
+$('buildBtn').onclick=async()=>{ $('buildBtn').disabled=true; $('downloadBtn').disabled=true; $('copyBtn').disabled=true; m3uText='#EXTM3U\n'; let total=0; for(let i=0;i<series.length;i++){const s=series[i]; s.status=`กำลังอ่าน (${i+1}/${series.length})`; renderRows(); try{const html=await getText(s.url), d=parseDetail(html,s.url,$('language').value); s.title=d.title||s.title; s.image=d.poster||s.image; s.episodes=d.episodeLinks; for(let j=0;j<d.episodeLinks.length;j++){const item=await resolveEpisode(s.url,d,d.episodeLinks[j],j); m3uText+=`#EXTINF:-1 tvg-id="${esc(s.url)}" tvg-name="${esc(item.name)}" tvg-logo="${esc(item.image)}" group-title="${esc(item.group)}",${esc(item.name)}\n`; m3uText+=`#EXTVLCOPT:http-referrer=${SITE}\n${item.url}\n`; total++;} s.status='สำเร็จ'; }catch(e){s.status='ผิดพลาด: '+e.message} renderRows(); status(`กำลังสร้าง M3U: ${i+1}/${series.length} เรื่อง | ${total} รายการ`)} $('output').value=m3uText; $('entryCount').textContent=total; $('downloadBtn').disabled=!total; $('copyBtn').disabled=!total; status(`สร้างเสร็จแล้ว ${total} รายการ`,'ok'); $('buildBtn').disabled=false; };
+$('downloadBtn').onclick=()=>{const blob=new Blob([m3uText],{type:'audio/x-mpegurl;charset=utf-8'}), a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='seriedays-playlist.m3u'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+$('copyBtn').onclick=async()=>{try{await navigator.clipboard.writeText($('output').value);status('คัดลอก M3U แล้ว','ok')}catch{status('คัดลอกไม่ได้ ให้เลือกข้อความในช่องผลลัพธ์แล้วกด Ctrl+C','bad')}};
+</script>
+</body>
+</html>
